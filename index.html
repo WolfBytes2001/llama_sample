@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ollama Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center px-4">
+  <div class="w-full max-w-2xl bg-white shadow-xl rounded-2xl p-6 space-y-4">
+    <h1 class="text-2xl font-bold text-center text-gray-800">💬 Ollama Chat</h1>
+
+    <div id="chat-box" class="h-96 overflow-y-auto p-4 bg-gray-50 border rounded-lg space-y-3 text-sm">
+      <!-- Chat messages will go here -->
+    </div>
+
+    <form id="chat-form" class="flex gap-2">
+      <input type="text" id="user-input" class="flex-1 p-2 border rounded-lg" placeholder="Type a message..." required />
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Send</button>
+    </form>
+  </div>
+
+  <script>
+    const chatBox = document.getElementById('chat-box');
+    const chatForm = document.getElementById('chat-form');
+    const userInput = document.getElementById('user-input');
+
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const userMessage = userInput.value.trim();
+      if (!userMessage) return;
+
+      appendMessage('You', userMessage);
+      userInput.value = '';
+
+      const responseStream = await fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'tinyllama', // Replace with your model name
+          prompt: [{ role: 'user', content: userMessage }],
+          stream: true
+        })
+      });
+
+      const reader = responseStream.body.getReader();
+      const decoder = new TextDecoder();
+      let responseText = '';
+      let botMessage = appendMessage('Ollama', '');
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.trim().split('\n');
+
+        for (let line of lines) {
+          if (line.startsWith('data:')) {
+            const payload = JSON.parse(line.slice(5));
+            if (payload.done) break;
+            if (payload.message?.content) {
+              responseText += payload.message.content;
+              botMessage.innerHTML = `<strong>Ollama:</strong> ${responseText}`;
+              chatBox.scrollTop = chatBox.scrollHeight;
+            }
+          }
+        }
+      }
+    });
+
+    function appendMessage(sender, text) {
+      const message = document.createElement('div');
+      message.innerHTML = `<strong>${sender}:</strong> ${text}`;
+      chatBox.appendChild(message);
+      chatBox.scrollTop = chatBox.scrollHeight;
+      return message;
+    }
+  </script>
+</body>
+</html>
